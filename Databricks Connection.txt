@@ -1,0 +1,19 @@
+from databricks.sdk import WorkspaceClient
+
+# 1. Initialize Databricks workspace client
+w = WorkspaceClient(
+    host="https://dbc-5be2f783-1fe1.cloud.databricks.com", 
+    token="dapic7ec3be5185c33a7840c789cf43c4518" 
+)
+
+# 2. Define the local path of the generated file
+local_file_path = "D:/DE Project/mobility/traffic_data/traffic_bronze/traffic_data.json" 
+
+# 3. Define the destination path in Databricks Volume
+dbfs_path = "/Volumes/workspace/default/traffic_data/traffic_bronze/traffic_data.json"
+
+# 4. Upload the file to Databricks
+print("Uploading data to Databricks...")
+with open(local_file_path, "rb") as f:
+    w.files.upload(dbfs_path, f)
+print("Data uploaded successfully. Ready for processing!")
