@@ -34,24 +34,24 @@ The project was executed through a distributed development approach, dividing th
 ![Power BI Dashboard](assets/powerbi_dashboard.png)
 
 ## Data Evolution (Medallion Architecture Samples)
-To logically illustrate the data transformation process, below are representative data schemas and samples at each stage of the pipeline extracted directly from the processing layers:
+To logically illustrate the data transformation process and data lineage, below is a trace of specific events as they flow through the pipeline.
 
 ### 1. Bronze Layer (Raw Data)
-*Immutable append-only storage containing the raw JSON payloads exactly as received from the Kafka message broker.*
+*Notice the first record contains an invalid speed type ("FAST") which will be caught by the DQ rules, while the other two are valid.*
 
 | kafka_timestamp | vehicle_id | raw_json |
 | :--- | :--- | :--- |
-| 2026-06-27 17:53:19.399 | e316d4fe-e800-44a7-81ec-245d6bfb62ff | `{"vehicle_id": "e316d4fe-e800-44a7-81ec-245d6bfb62ff", "road_id": "R400", "city_zone": "TECHPARK", "speed": 24, "congestion_level": 3, "weather": "FOG", "event_time": "2026-06-27T17:53:19.399486+00:00", "road_condition": "UNDER_CONSTRUCTION"}` |
-| 2026-06-27 17:53:39.966 | 4879af14-a258-4374-a037-391e867900a1 | `{"vehicle_id": "4879af14-a258-4374-a037-391e867900a1", "road_id": "R300", "city_zone": "TECHPARK", "speed": 89, "congestion_level": 5, "weather": "STORM", "event_time": "2026-06-27T17:53:39.966545+00:00"}` |
+| 2026-06-27 17:54:24.346 | 0f799de4-74e7-4ae4-a3d4-eabc1cebaab0 | `{"vehicle_id": "0f799de4-...", "road_id": "R300", "city_zone": "SUBURB", "speed": "FAST", "congestion_level": 2, "weather": "FOG", "event_time": "2026-06-27T17:54:24.346396+00:00"}` |
+| 2026-06-27 17:54:26.749 | 2d943837-539b-41d9-a8ff-d2c04bb45d45 | `{"vehicle_id": "2d943837-...", "road_id": "R300", "city_zone": "TRAINSTATION", "speed": 38, "congestion_level": 2, "weather": "RAIN", "event_time": "2026-06-27T17:54:26.748997+00:00"}` |
+| 2026-06-27 17:53:58.789 | 569b4f3e-7c5a-4edf-b10b-d5526a8adc98 | `{"vehicle_id": "569b4f3e-...", "road_id": "R200", "city_zone": "TRAINSTATION", "speed": 27, "congestion_level": 1, "weather": "STORM", "event_time": "2026-06-27T17:53:58.789779+00:00", "road_condition": "GOOD"}` |
 
 ### 2. Silver Layer (Cleansed & Conformed)
-*Parsed, typed, and validated records. Invalid entries are handled via DQ flags or filtered entirely.*
+*The malformed record (`0f799de4-...`) has been automatically dropped by the Spark validation filter. The remaining valid records are parsed, cast, and enriched with `speed_band`.*
 
 | vehicle_id | speed_int | event_ts | speed_band | dq_flag | time_valid |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| e316d4fe-e800-44a7-81ec-245d6bfb62ff | 24 | 2026-06-27T17:53:19.399Z | low | ok | 1 |
-| 8ec6394b-9069-4584-b977-65d67e0272c2 | 51 | 2026-06-27T17:53:48.403Z | medium | ok | 1 |
-| a4508916-c8a4-40f7-8a93-b0a711eb0c27 | 73 | 2026-06-27T17:53:08.255Z | high | ok | 1 |
+| 2d943837-539b-41d9-a8ff-d2c04bb45d45 | 38 | 2026-06-27T17:54:26.748Z | medium | ok | 1 |
+| 569b4f3e-7c5a-4edf-b10b-d5526a8adc98 | 27 | 2026-06-27T17:53:58.789Z | low | ok | 1 |
 
 ### 3. Gold Layer (Star Schema for Power BI)
 *Business-level aggregations and materialized views structured in a Star Schema, optimized for direct querying by the Power BI dashboard.*
@@ -59,9 +59,8 @@ To logically illustrate the data transformation process, below are representativ
 **fact_traffic (Fact Table):**
 | vehicle_id | road_id | city_zone | speed_int | congestion_level | event_ts | peak_flag | speed_band | weather |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| e316d4fe-e800-44a7-81ec-245d6bfb62ff | R400 | TECHPARK | 24 | 3 | 2026-06-27 17:53:19.399 | 1 | low | FOG |
-| 8ec6394b-9069-4584-b977-65d67e0272c2 | R200 | TECHPARK | 51 | 5 | 2026-06-27 17:53:48.403 | 1 | medium | STORM |
-| a4508916-c8a4-40f7-8a93-b0a711eb0c27 | R200 | TRAINSTATION | 73 | 4 | 2026-06-27 17:53:08.255 | 1 | high | RAIN |
+| 2d943837-539b-41d9-a8ff-d2c04bb45d45 | R300 | TRAINSTATION | 38 | 2 | 2026-06-27 17:54:26.748 | 1 | medium | RAIN |
+| 569b4f3e-7c5a-4edf-b10b-d5526a8adc98 | R200 | TRAINSTATION | 27 | 1 | 2026-06-27 17:53:58.789 | 1 | low | STORM |
 
 **dim_zone (Dimension Table):**
 | city_zone | zone_type | traffic_risk |
